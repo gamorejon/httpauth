@@ -19,6 +19,7 @@
 package httpauth
 
 import (
+    "fmt"
 	"errors"
 	"net/http"
 
@@ -160,19 +161,23 @@ func (a Authorizer) Register(rw http.ResponseWriter, req *http.Request, user Use
 	if password == "" {
 		return mkerror("no password given")
 	}
+    fmt.Println("Register")
 
 	// Validate username
 	_, err := a.backend.User(user.Username)
 	if err == nil {
+        fmt.Println("user already exists")
 		a.addMessage(rw, req, "Username has been taken.")
 		return mkerror("user already exists")
 	} else if err != ErrMissingUser {
+        fmt.Println("different error")
 		if err != nil {
 			return mkerror(err.Error())
 		}
 		return nil
 	}
 
+    fmt.Println("User validated")
 	// Generate and save hash
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

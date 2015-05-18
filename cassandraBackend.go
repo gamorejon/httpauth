@@ -2,6 +2,7 @@ package httpauth
 
 import (
     "log"
+    "fmt"
 //	"errors"
 	"github.com/gocql/gocql"
 //	"github.com/elvtechnology/gocqltable"
@@ -38,14 +39,17 @@ func mkmgoerror(msg string) error {
 // Example:
 //     backend = httpauth.MongodbAuthBackend("mongodb://127.0.0.1/", "auth")
 //     defer backend.Close()
-func NewCassandraBackend(cassandraURLs []string, k string, c gocql.Consistency) (b CassandraAuthBackend, err error) {
+func NewCassandraAuthBackend(cassandraURLs []string, k string, c gocql.Consistency) (b CassandraAuthBackend, err error) {
 	b.cassandraURLs	= cassandraURLs
 	b.keyspace		= k
 	b.consistency	= c
     b.cluster	   = gocql.NewCluster(cassandraURLs...)
+    b.cluster.Keyspace = k
+    b.cluster.Consistency = c
 	b.session, err = b.cluster.CreateSession()
 	if err != nil {
 		log.Fatalln("Unable to open up a session with Cassandra (err="+err.Error() + ")")
+        panic(err)
 	}
 
     return b, err;
@@ -89,11 +93,13 @@ func NewCassandraBackend(cassandraURLs []string, k string, c gocql.Consistency) 
 }
 
 func (b CassandraAuthBackend) User(username string) (user UserData, e error) {
+    fmt.Println("User")
     session := b.session
     if err := session.Query(`SELECT username, email, hash, role FROM users WHERE username = ? LIMIT 1`,
     username).Consistency(gocql.One).Scan(&user.Username, &user.Email, &user.Hash, &user.Role); err != nil {
-        log.Fatal(err)
-        return user, err
+        fmt.Println("User: "+ err.Error())
+        //log.Fatal("User: " + err.Error())
+        return user, ErrMissingUser
     }
     user.Username = username
     return user, nil
@@ -105,6 +111,7 @@ func (b CassandraAuthBackend) Users() (us []UserData, e error) {
         username, email, role string
         hash                  []byte
     )
+    fmt.Println("Users")
     session := b.session
     iter := session.Query(`SELECT username, email, hash, role FROM users`).Iter()
     next := iter.Scan(&username, &email, &hash, &role)
@@ -116,17 +123,18 @@ func (b CassandraAuthBackend) Users() (us []UserData, e error) {
 
 // SaveUser adds a new user, replacing one with the same username.
 func (b CassandraAuthBackend) SaveUser(user UserData) (err error) {
+    fmt.Println("SaveUser")
     session := b.session
-    if _, err := b.User(user.Username); err == nil {
+    if _, err := b.User(user.Username); err != nil {
         if err = session.Query(`INSERT INTO users (username, email, hash, role) VALUES (?, ?, ?, ?)`,
         user.Username, user.Email, user.Hash, user.Role).Exec(); err != nil {
-            log.Fatal(err)
+            log.Fatal("SaveUser: "+err.Error())
             return err
         }
     } else {
-        if err = session.Query(`UPDATE users SET email=? hash=? role=?) VALUES (?, ?, ?) WHERE username=?`,
+        if err = session.Query(`UPDATE users SET email=? hash=? role=? VALUES (?, ?, ?) WHERE username=?`,
         user.Email, user.Hash, user.Role, user.Username).Exec(); err != nil {
-            log.Fatal(err)
+            log.Fatal("SaveUser:" +err.Error())
             return  err
         }
     }
@@ -139,7 +147,7 @@ func (b CassandraAuthBackend) DeleteUser(username string) error {
     //Probably a better way to do this in one query
     if _, err := b.User(username); err != nil {
         if err = session.Query(`DELETE from users WHERE username = ?`, username).Exec(); err != nil {
-            log.Fatal(err)
+            log.Fatal("DeleteUser: "+err.Error())
             return err
         }
     } else {
