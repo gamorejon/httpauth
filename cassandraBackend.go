@@ -1,10 +1,11 @@
 package httpauth
 
 import (
-	"errors"
+    "log"
+//	"errors"
 	"github.com/gocql/gocql"
-	"github.com/elvtechnology/gocqltable"
-	"github.com/elvtechnology/gocqltable/recipes"
+//	"github.com/elvtechnology/gocqltable"
+//	"github.com/elvtechnology/gocqltable/recipes"
 	//"gopkg.in/mgo.v2"
 	//"gopkg.in/mgo.v2/bson"
 )
@@ -16,10 +17,10 @@ import (
 //	session  *mgo.Session
 //}
 type CassandraAuthBackend struct {
-	cassandraURLs string[]
+	cassandraURLs []string
 	keyspace string
 	consistency gocql.Consistency
-	cluster gocql.cluster
+	cluster *gocql.ClusterConfig//gocql.Cluster
 	session  *gocql.Session
 }
 /*
@@ -37,17 +38,18 @@ func mkmgoerror(msg string) error {
 // Example:
 //     backend = httpauth.MongodbAuthBackend("mongodb://127.0.0.1/", "auth")
 //     defer backend.Close()
-func NewCassandraBackend(cassandraURLs string[], k string, gocql.Consistency c) (b CassandraAuthBackend, e error) {
-	b.cassandaURLs	= cassandraURLs
+func NewCassandraBackend(cassandraURLs []string, k string, c gocql.Consistency) (b CassandraAuthBackend, err error) {
+	b.cassandraURLs	= cassandraURLs
 	b.keyspace		= k
 	b.consistency	= c
-	b.cluster	   := gocql.NewCluster(cassandraURLs)
-	b.session, err := b.cluster.CreateSession()
+    b.cluster	   = gocql.NewCluster(cassandraURLs...)
+	b.session, err = b.cluster.CreateSession()
 	if err != nil {
 		log.Fatalln("Unable to open up a session with Cassandra (err="+err.Error() + ")")
 	}
 
-	gocqltable.SetDefaultSessions(b.session)
+    return b, err;
+	/*gocqltable.SetDefaultSessions(b.session)
 
 	keyspace := gocqltable.NewKeyspace(k)
 
@@ -65,9 +67,9 @@ func NewCassandraBackend(cassandraURLs string[], k string, gocql.Consistency c) 
 		Hash		string
 		Role		string
 		Created		time.Time
-	}
+	}*/
 
-	goauthTable := struct {
+	/*goauthTable := struct {
 		recipes.CRUD
 	}{
 		recipes.CRUD{
@@ -78,43 +80,84 @@ func NewCassandraBackend(cassandraURLs string[], k string, gocql.Consistency c) 
 				User{},
 			),
 		},
-	}
+	}*/
 
-	err = goauthTable.Create()
-	if err != nil {
+	//err = goauthTable.Create()
+	/*if err != nil {
 		log.Fatalln(err)
-	}
-}
-/*
-func NewMongodbBackend(mongoURL string, database string) (b MongodbAuthBackend, e error) {
-	// Set up connection to database
-	b.mongoURL = mongoURL
-	b.database = database
-	session, err := mgo.Dial(b.mongoURL)
-	if err != nil {
-		return b, mkmgoerror(err.Error())
-	}
-	err = session.Ping()
-	if err != nil {
-		return b, mkmgoerror(err.Error())
-	}
-
-	// Ensure that the Username field is unique
-	index := mgo.Index{
-		Key:    []string{"Username"},
-		Unique: true,
-	}
-	err = session.DB(b.database).C("goauth").EnsureIndex(index)
-	if err != nil {
-		return b, mkmgoerror(err.Error())
-	}
-	b.session = session
-	return
+	}*/
 }
 
+func (b CassandraAuthBackend) User(username string) (user UserData, e error) {
+    session := b.session
+    if err := session.Query(`SELECT username, email, hash, role FROM users WHERE username = ? LIMIT 1`,
+    username).Consistency(gocql.One).Scan(&user.Username, &user.Email, &user.Hash, &user.Role); err != nil {
+        log.Fatal(err)
+        return user, err
+    }
+    user.Username = username
+    return user, nil
+}
+
+// Users returns a slice of all users.
+func (b CassandraAuthBackend) Users() (us []UserData, e error) {
+    var (
+        username, email, role string
+        hash                  []byte
+    )
+    session := b.session
+    iter := session.Query(`SELECT username, email, hash, role FROM users`).Iter()
+    next := iter.Scan(&username, &email, &hash, &role)
+    for next {
+        us = append(us, UserData{username, email, hash, role})
+    }
+    return us, nil
+}
+
+// SaveUser adds a new user, replacing one with the same username.
+func (b CassandraAuthBackend) SaveUser(user UserData) (err error) {
+    session := b.session
+    if _, err := b.User(user.Username); err == nil {
+        if err = session.Query(`INSERT INTO users (username, email, hash, role) VALUES (?, ?, ?, ?)`,
+        user.Username, user.Email, user.Hash, user.Role).Exec(); err != nil {
+            log.Fatal(err)
+            return err
+        }
+    } else {
+        if err = session.Query(`UPDATE users SET email=? hash=? role=?) VALUES (?, ?, ?) WHERE username=?`,
+        user.Email, user.Hash, user.Role, user.Username).Exec(); err != nil {
+            log.Fatal(err)
+            return  err
+        }
+    }
+    return
+}
+
+// DeleteUser removes a user, raising ErrDeleteNull if that user was missing.
+func (b CassandraAuthBackend) DeleteUser(username string) error {
+    session := b.session
+    //Probably a better way to do this in one query
+    if _, err := b.User(username); err != nil {
+        if err = session.Query(`DELETE from users WHERE username = ?`, username).Exec(); err != nil {
+            log.Fatal(err)
+            return err
+        }
+    } else {
+        return ErrDeleteNull
+    }
+    return nil
+}
+
+// Close cleans up the backend once done with. This should be called before
+// program exit.
+func (b CassandraAuthBackend) Close() {
+	if b.session != nil {
+		b.session.Close()
+	}
+}
 // User returns the user with the given username. Error is set to
 // ErrMissingUser if user is not found.
-func (b MongodbAuthBackend) User(username string) (user UserData, e error) {
+/*func (b MongodbAuthBackend) User(username string) (user UserData, e error) {
 	var result UserData
 
 	c := b.connect()
