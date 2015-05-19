@@ -46,7 +46,7 @@ type Role int
 type UserData struct {
 	Username string `bson:"Username"`
 	Email    string `bson:"Email"`
-	Hash     []byte `bson:"Hash"`
+	Hash     []byte `bson:"Hash" json:"-"`
 	Role     string `bson:"Role"`
 }
 
