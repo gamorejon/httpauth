@@ -46,6 +46,7 @@ type Role int
 type UserData struct {
 	Username string `bson:"Username"`
 	Email    string `bson:"Email"`
+	Phone    string `bson:"Phone"`
 	Hash     []byte `bson:"Hash"`
 	Role     string `bson:"Role"`
 }
@@ -135,11 +136,11 @@ func (a Authorizer) Login(rw http.ResponseWriter, req *http.Request, u string, p
 	session.Values["username"] = u
 	session.Save(req, rw)
 
-	redirectSession, _ := a.cookiejar.Get(req, "redirects")
+	/*redirectSession, _ := a.cookiejar.Get(req, "redirects")
 	if flashes := redirectSession.Flashes(); len(flashes) > 0 {
 		dest = flashes[0].(string)
-	}
-	http.Redirect(rw, req, dest, http.StatusSeeOther)
+	}*/
+	//http.Redirect(rw, req, dest, http.StatusSeeOther)
 	return nil
 }
 
@@ -203,7 +204,7 @@ func (a Authorizer) Register(rw http.ResponseWriter, req *http.Request, user Use
 }
 
 // Update changes data for an existing user. Needs thought...
-func (a Authorizer) Update(rw http.ResponseWriter, req *http.Request, p string, e string) error {
+/*func (a Authorizer) Update(rw http.ResponseWriter, req *http.Request, p string, e string) error {
 	var (
 		hash  []byte
 		email string
@@ -234,14 +235,14 @@ func (a Authorizer) Update(rw http.ResponseWriter, req *http.Request, p string, 
 		email = user.Email
 	}
 
-	newuser := UserData{username, email, hash, user.Role}
+	newuser := UserData{username, email, phone, hash, user.Role}
 
 	err = a.backend.SaveUser(newuser)
 	if err != nil {
 		a.addMessage(rw, req, err.Error())
 	}
 	return nil
-}
+}*/
 
 // Authorize checks if a user is logged in and returns an error on failed
 // authentication. If redirectWithMessage is set, the page being authorized

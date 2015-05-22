@@ -95,8 +95,8 @@ func NewCassandraAuthBackend(cassandraURLs []string, k string, c gocql.Consisten
 func (b CassandraAuthBackend) User(username string) (user UserData, e error) {
     fmt.Println("User")
     session := b.session
-    if err := session.Query(`SELECT username, email, hash, role FROM users WHERE username = ? LIMIT 1`,
-    username).Consistency(gocql.One).Scan(&user.Username, &user.Email, &user.Hash, &user.Role); err != nil {
+    if err := session.Query(`SELECT username, email, phone, hash, role FROM users WHERE username = ? LIMIT 1`,
+    username).Consistency(gocql.One).Scan(&user.Username, &user.Email, &user.Phone, &user.Hash, &user.Role); err != nil {
         fmt.Println("User: "+ err.Error())
         //log.Fatal("User: " + err.Error())
         return user, ErrMissingUser
@@ -108,15 +108,15 @@ func (b CassandraAuthBackend) User(username string) (user UserData, e error) {
 // Users returns a slice of all users.
 func (b CassandraAuthBackend) Users() (us []UserData, e error) {
     var (
-        username, email, role string
-        hash                  []byte
+        username, email, phone, role string
+        hash                         []byte
     )
     fmt.Println("Users")
     session := b.session
-    iter := session.Query(`SELECT username, email, hash, role FROM users`).Iter()
+    iter := session.Query(`SELECT username, email, phone, hash, role FROM users`).Iter()
     next := iter.Scan(&username, &email, &hash, &role)
     for next {
-        us = append(us, UserData{username, email, hash, role})
+        us = append(us, UserData{username, email, phone, hash, role})
     }
     return us, nil
 }
@@ -126,14 +126,14 @@ func (b CassandraAuthBackend) SaveUser(user UserData) (err error) {
     fmt.Println("SaveUser")
     session := b.session
     if _, err := b.User(user.Username); err != nil {
-        if err = session.Query(`INSERT INTO users (username, email, hash, role) VALUES (?, ?, ?, ?)`,
-        user.Username, user.Email, user.Hash, user.Role).Exec(); err != nil {
+        if err = session.Query(`INSERT INTO users (username, email, phone, hash, role) VALUES (?, ?, ?, ?)`,
+        user.Username, user.Email, user.Phone, user.Hash, user.Role).Exec(); err != nil {
             log.Fatal("SaveUser: "+err.Error())
             return err
         }
     } else {
-        if err = session.Query(`UPDATE users SET email=? hash=? role=? VALUES (?, ?, ?) WHERE username=?`,
-        user.Email, user.Hash, user.Role, user.Username).Exec(); err != nil {
+        if err = session.Query(`UPDATE users SET email=? hash=? phone= ? role=? VALUES (?, ?, ?) WHERE username=?`,
+        user.Email, user.Phone, user.Hash, user.Role, user.Username).Exec(); err != nil {
             log.Fatal("SaveUser:" +err.Error())
             return  err
         }
