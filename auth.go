@@ -47,7 +47,7 @@ type UserData struct {
 	Username string `bson:"Username"`
 	Email    string `bson:"Email"`
 	Phone    string `bson:"Phone"`
-	Hash     []byte `bson:"Hash"`
+	Hash     []byte `bson:"Hash" json:"-"`
 	Role     string `bson:"Role"`
 }
 
