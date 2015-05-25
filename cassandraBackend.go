@@ -131,10 +131,20 @@ func (b CassandraAuthBackend) SaveUser(user UserData) (err error) {
             log.Fatal("SaveUser: "+err.Error())
             return err
         }
+        if err = session.Query(`INSERT INTO users_by_phone (username, email, phone, hash, role) VALUES (?, ?, ?, ?, ?)`,
+        user.Username, user.Email, user.Phone, user.Hash, user.Role).Exec(); err != nil {
+            log.Fatal("SaveUserByPhone: "+err.Error())
+            return err
+        }
     } else {
         if err = session.Query(`UPDATE users SET email=? hash=? phone= ? role=? VALUES (?, ?, ?, ?) WHERE username=?`,
         user.Email, user.Phone, user.Hash, user.Role, user.Username).Exec(); err != nil {
             log.Fatal("SaveUser:" +err.Error())
+            return  err
+        }
+        if err = session.Query(`UPDATE users_by_phone SET email=? hash=? phone= ? role=? VALUES (?, ?, ?, ?) WHERE username=?`,
+        user.Email, user.Phone, user.Hash, user.Role, user.Username).Exec(); err != nil {
+            log.Fatal("SaveUserPhone:" +err.Error())
             return  err
         }
     }
